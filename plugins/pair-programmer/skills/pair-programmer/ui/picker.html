@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Start Recording</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', Roboto, sans-serif;
+      background: linear-gradient(145deg, #1c1c1e 0%, #2c2c2e 100%);
+      color: #fff;
+      padding: 24px;
+      user-select: none;
+      -webkit-app-region: drag;
+      min-height: 100vh;
+    }
+
+    .header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 24px;
+    }
+
+    .header-icon {
+      width: 40px;
+      height: 40px;
+      background: linear-gradient(135deg, #ff3b30 0%, #ff6b6b 100%);
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+      box-shadow: 0 4px 12px rgba(255, 59, 48, 0.3);
+    }
+
+    .header-text h1 {
+      font-size: 20px;
+      font-weight: 600;
+      letter-spacing: -0.3px;
+      color: #f5f5f7;
+    }
+
+    .header-text p {
+      font-size: 13px;
+      color: #98989d;
+      margin-top: 2px;
+    }
+
+    .section {
+      margin-bottom: 24px;
+    }
+
+    .section-title {
+      font-size: 11px;
+      font-weight: 600;
+      color: #98989d;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      margin-bottom: 12px;
+    }
+
+    .displays {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 12px;
+      -webkit-app-region: no-drag;
+    }
+
+    .display-option {
+      cursor: pointer;
+      border: 2px solid transparent;
+      border-radius: 12px;
+      overflow: hidden;
+      transition: all 0.2s ease;
+      background: #2c2c2e;
+      position: relative;
+    }
+
+    .display-option:hover {
+      background: #3a3a3c;
+      transform: translateY(-2px);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+    }
+
+    .display-option.selected {
+      border-color: #0a84ff;
+      box-shadow: 0 0 0 1px #0a84ff, 0 8px 24px rgba(10, 132, 255, 0.2);
+    }
+
+    .display-option.selected::after {
+      content: '✓';
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      width: 22px;
+      height: 22px;
+      background: #0a84ff;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      font-weight: 600;
+      z-index: 10;
+    }
+
+    .display-thumbnail {
+      width: 100%;
+      aspect-ratio: 16/10;
+      background: #1c1c1e;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .display-thumbnail img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      transition: transform 0.3s ease;
+    }
+
+    .display-option:hover .display-thumbnail img {
+      transform: scale(1.05);
+    }
+
+    .display-thumbnail .placeholder {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+      color: #636366;
+    }
+
+    .placeholder-icon {
+      font-size: 28px;
+      opacity: 0.6;
+    }
+
+    .placeholder-res {
+      font-size: 12px;
+      font-weight: 500;
+      color: #98989d;
+    }
+
+    .display-info {
+      padding: 10px 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .display-name {
+      font-size: 13px;
+      font-weight: 500;
+      color: #f5f5f7;
+    }
+
+    .display-res {
+      font-size: 11px;
+      color: #636366;
+      font-weight: 500;
+    }
+
+    .audio-section {
+      background: #2c2c2e;
+      border-radius: 12px;
+      overflow: hidden;
+    }
+
+    .audio-option {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 14px 16px;
+      cursor: pointer;
+      transition: background 0.15s ease;
+      -webkit-app-region: no-drag;
+    }
+
+    .audio-option:hover {
+      background: #3a3a3c;
+    }
+
+    .audio-option:not(:last-child) {
+      border-bottom: 1px solid #3a3a3c;
+    }
+
+    .audio-option input[type="checkbox"] {
+      display: none;
+    }
+
+    .checkbox-custom {
+      width: 22px;
+      height: 22px;
+      border: 2px solid #636366;
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.15s ease;
+      flex-shrink: 0;
+    }
+
+    .audio-option input:checked + .checkbox-custom {
+      background: #0a84ff;
+      border-color: #0a84ff;
+    }
+
+    .checkbox-custom::after {
+      content: '✓';
+      color: white;
+      font-size: 12px;
+      font-weight: 700;
+      opacity: 0;
+      transform: scale(0.5);
+      transition: all 0.15s ease;
+    }
+
+    .audio-option input:checked + .checkbox-custom::after {
+      opacity: 1;
+      transform: scale(1);
+    }
+
+    .audio-icon {
+      font-size: 18px;
+      width: 24px;
+      text-align: center;
+    }
+
+    .audio-label {
+      flex: 1;
+    }
+
+    .audio-label-title {
+      font-size: 14px;
+      font-weight: 500;
+      color: #f5f5f7;
+    }
+
+    .audio-label-desc {
+      font-size: 11px;
+      color: #636366;
+      margin-top: 1px;
+    }
+
+    .buttons {
+      display: flex;
+      gap: 12px;
+      margin-top: 24px;
+      -webkit-app-region: no-drag;
+    }
+
+    button {
+      flex: 1;
+      padding: 14px 20px;
+      border: none;
+      border-radius: 10px;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      letter-spacing: -0.2px;
+    }
+
+    button:active {
+      transform: scale(0.98);
+    }
+
+    .btn-cancel {
+      background: #3a3a3c;
+      color: #f5f5f7;
+    }
+
+    .btn-cancel:hover {
+      background: #48484a;
+    }
+
+    .btn-start {
+      background: linear-gradient(135deg, #ff3b30 0%, #ff6259 100%);
+      color: #fff;
+      box-shadow: 0 4px 14px rgba(255, 59, 48, 0.35);
+    }
+
+    .btn-start:hover {
+      box-shadow: 0 6px 20px rgba(255, 59, 48, 0.45);
+      transform: translateY(-1px);
+    }
+
+    .btn-start:active {
+      transform: scale(0.98) translateY(0);
+    }
+
+    .loading {
+      text-align: center;
+      padding: 40px 20px;
+      color: #98989d;
+    }
+
+    .loading-spinner {
+      width: 32px;
+      height: 32px;
+      border: 3px solid #3a3a3c;
+      border-top-color: #0a84ff;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin: 0 auto 12px;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="header-icon">⏺</div>
+    <div class="header-text">
+      <h1>Start Recording</h1>
+      <p>Select display and audio sources</p>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">Select Display</div>
+    <div class="displays" id="displays">
+      <div class="loading">
+        <div class="loading-spinner"></div>
+        <div>Loading displays...</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">Audio Sources</div>
+    <div class="audio-section">
+      <label class="audio-option">
+        <input type="checkbox" id="mic" checked>
+        <span class="checkbox-custom"></span>
+        <span class="audio-icon">🎙</span>
+        <div class="audio-label">
+          <div class="audio-label-title">Microphone</div>
+          <div class="audio-label-desc">Record your voice</div>
+        </div>
+      </label>
+      <label class="audio-option">
+        <input type="checkbox" id="systemAudio" checked>
+        <span class="checkbox-custom"></span>
+        <span class="audio-icon">🔊</span>
+        <div class="audio-label">
+          <div class="audio-label-title">System Audio</div>
+          <div class="audio-label-desc">Capture app sounds</div>
+        </div>
+      </label>
+    </div>
+  </div>
+
+  <div class="buttons">
+    <button class="btn-cancel" onclick="cancel()">Cancel</button>
+    <button class="btn-start" onclick="start()">Start Recording</button>
+  </div>
+
+  <script>
+    const { ipcRenderer, desktopCapturer } = require('electron');
+
+    let selectedChannelId = null;
+    let displays = [];
+    let thumbnails = {};
+
+    ipcRenderer.on('displays', async (event, data) => {
+      displays = data;
+      if (displays.length) selectedChannelId = displays[0].channelId;
+      await loadThumbnails();
+      renderDisplays();
+    });
+
+    async function loadThumbnails() {
+      try {
+        const sources = await desktopCapturer.getSources({
+          types: ['screen'],
+          thumbnailSize: { width: 320, height: 200 }
+        });
+        sources.forEach((source, index) => {
+          if (source.thumbnail) {
+            thumbnails[index + 1] = source.thumbnail.toDataURL();
+          }
+        });
+      } catch (e) {
+        console.error('Failed to load thumbnails:', e);
+      }
+    }
+
+    function renderDisplays() {
+      const container = document.getElementById('displays');
+      container.innerHTML = '';
+
+      displays.forEach((display, index) => {
+        const displayNum = index + 1;
+        const isSelected = display.channelId === selectedChannelId;
+        const div = document.createElement('div');
+        div.className = `display-option ${isSelected ? 'selected' : ''}`;
+        div.onclick = () => selectDisplay(display.channelId);
+
+        const thumbDiv = document.createElement('div');
+        thumbDiv.className = 'display-thumbnail';
+        if (thumbnails[displayNum]) {
+          const img = document.createElement('img');
+          img.src = thumbnails[displayNum];
+          thumbDiv.appendChild(img);
+        } else {
+          const placeholder = document.createElement('div');
+          placeholder.className = 'placeholder';
+          placeholder.innerHTML = `
+            <span class="placeholder-icon">🖥</span>
+            <span class="placeholder-res">${display.width} × ${display.height}</span>
+          `;
+          thumbDiv.appendChild(placeholder);
+        }
+
+        const infoDiv = document.createElement('div');
+        infoDiv.className = 'display-info';
+        infoDiv.innerHTML = `
+          <span class="display-name">${display.label || 'Display ' + displayNum}</span>
+          <span class="display-res">${display.width}×${display.height}</span>
+        `;
+
+        div.appendChild(thumbDiv);
+        div.appendChild(infoDiv);
+        container.appendChild(div);
+      });
+    }
+
+    function selectDisplay(channelId) {
+      selectedChannelId = channelId;
+      document.querySelectorAll('.display-option').forEach((el, i) => {
+        el.classList.toggle('selected', displays[i] && displays[i].channelId === channelId);
+      });
+    }
+
+    function cancel() {
+      ipcRenderer.send('picker-result', null);
+    }
+
+    function start() {
+      ipcRenderer.send('picker-result', {
+        displayChannelId: selectedChannelId,
+        mic: document.getElementById('mic').checked,
+        systemAudio: document.getElementById('systemAudio').checked,
+      });
+    }
+  </script>
+</body>
+</html>

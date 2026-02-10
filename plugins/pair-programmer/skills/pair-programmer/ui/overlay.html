@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>VideoDB Context Overlay</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body {
+      background: transparent;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    }
+    .container {
+      background: rgba(26, 26, 26, 0.95);
+      border-radius: 12px;
+      padding: 16px;
+      color: #fff;
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      max-height: 380px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+      -webkit-app-region: drag;
+    }
+    .title {
+      font-size: 13px;
+      font-weight: 600;
+      color: #f5f5f7;
+    }
+    .close-btn {
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      border: none;
+      background: #333;
+      color: #999;
+      font-size: 14px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      -webkit-app-region: no-drag;
+    }
+    .close-btn:hover {
+      background: #444;
+      color: #fff;
+    }
+    .content {
+      flex: 1;
+      overflow-y: auto;
+      font-size: 12px;
+      line-height: 1.5;
+      color: #ccc;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .content::-webkit-scrollbar {
+      width: 6px;
+    }
+    .content::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    .content::-webkit-scrollbar-thumb {
+      background: #444;
+      border-radius: 3px;
+    }
+    .loading-wrap {
+      display: none;
+      flex: 1;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      padding: 24px 0;
+    }
+    .loading-wrap.visible {
+      display: flex;
+    }
+    .spinner {
+      width: 28px;
+      height: 28px;
+      border: 3px solid rgba(255, 255, 255, 0.2);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+    .loading-text {
+      font-size: 12px;
+      color: #86868b;
+    }
+    .content.loading-hidden {
+      display: none;
+    }
+    .status {
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px solid rgba(255, 255, 255, 0.1);
+      font-size: 11px;
+      color: #86868b;
+    }
+    .status-not-recording {
+      display: none;
+    }
+    .status-not-recording.visible {
+      display: block;
+    }
+    .status-channels {
+      display: none;
+      flex-wrap: wrap;
+      gap: 10px 14px;
+      align-items: center;
+    }
+    .status-channels.visible {
+      display: flex;
+    }
+    .channel-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .status-dot {
+      display: inline-block;
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: #30d158;
+      flex-shrink: 0;
+    }
+    .status-dot.live {
+      animation: blink 1.2s ease-in-out infinite;
+    }
+    @keyframes blink {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+    .status-starting {
+      display: none;
+    }
+    .status-starting.visible {
+      display: block;
+    }
+    .status-failed {
+      display: none;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .status-failed.visible {
+      display: flex;
+    }
+    .status-failed-message {
+      color: #ff453a;
+    }
+    .status-failed-hint {
+      color: #86868b;
+      font-size: 10px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <span class="title">VideoDB Context</span>
+      <button class="close-btn" onclick="close()">×</button>
+    </div>
+    <div class="loading-wrap" id="loadingWrap">
+      <div class="spinner"></div>
+      <span class="loading-text">Thinking...</span>
+    </div>
+    <div class="content" id="content">
+      Waiting for context...
+    </div>
+    <div class="status">
+      <div class="status-not-recording visible" id="statusNotRecording">
+        Type /record in Claude to start recording
+      </div>
+      <div class="status-starting" id="statusStarting">
+        Starting
+      </div>
+      <div class="status-failed" id="statusFailed">
+        <span class="status-failed-message" id="statusFailedMessage">Recording failed</span>
+        <span class="status-failed-hint">Run /record again in Claude to start a new recording.</span>
+      </div>
+      <div class="status-channels" id="statusChannels"></div>
+    </div>
+  </div>
+
+  <script>
+    const { ipcRenderer } = require('electron');
+
+    ipcRenderer.on('overlay-content', (event, data) => {
+      const loadingWrap = document.getElementById('loadingWrap');
+      const content = document.getElementById('content');
+      if (data.loading) {
+        loadingWrap.classList.add('visible');
+        content.classList.add('loading-hidden');
+      } else {
+        loadingWrap.classList.remove('visible');
+        content.classList.remove('loading-hidden');
+        content.textContent = data.text || 'No content';
+        content.scrollTop = content.scrollHeight;
+      }
+    });
+
+    ipcRenderer.on('overlay-status', (event, data) => {
+      const notRecordingEl = document.getElementById('statusNotRecording');
+      const startingEl = document.getElementById('statusStarting');
+      const failedEl = document.getElementById('statusFailed');
+      const failedMessageEl = document.getElementById('statusFailedMessage');
+      const channelsEl = document.getElementById('statusChannels');
+
+      if (data.failed) {
+        notRecordingEl.classList.remove('visible');
+        startingEl.classList.remove('visible');
+        failedEl.classList.add('visible');
+        channelsEl.classList.remove('visible');
+        channelsEl.innerHTML = '';
+        failedMessageEl.textContent = data.failed.message || 'Recording failed';
+      } else if (data.starting) {
+        notRecordingEl.classList.remove('visible');
+        startingEl.classList.add('visible');
+        failedEl.classList.remove('visible');
+        channelsEl.classList.remove('visible');
+        channelsEl.innerHTML = '';
+      } else if (data.recording) {
+        notRecordingEl.classList.remove('visible');
+        startingEl.classList.remove('visible');
+        failedEl.classList.remove('visible');
+        channelsEl.classList.add('visible');
+        const names = (data.channels && data.channels.length) ? data.channels : ['Recording'];
+        channelsEl.innerHTML = names.map(function (name) {
+          return '<div class="channel-item"><span class="status-dot live"></span><span>' + name + '</span></div>';
+        }).join('');
+      } else {
+        notRecordingEl.classList.add('visible');
+        startingEl.classList.remove('visible');
+        failedEl.classList.remove('visible');
+        channelsEl.classList.remove('visible');
+        channelsEl.innerHTML = '';
+      }
+    });
+
+    function close() {
+      ipcRenderer.send('overlay-close');
+    }
+  </script>
+</body>
+</html>

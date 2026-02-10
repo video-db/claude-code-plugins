@@ -1,0 +1,28 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume|clear",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/ensure-recorder.sh",
+            "statusMessage": "Checking recorder...",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/cleanup-recorder.sh",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  }
+}

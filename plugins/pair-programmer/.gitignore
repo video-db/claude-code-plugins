@@ -1,0 +1,19 @@
+# Dependencies
+node_modules/
+
+# Config with secrets
+.claude/skills/pair-programmer/config.json
+
+# Shared context file (runtime)
+.context.json
+
+# OS
+.DS_Store
+
+# Electron
+dist/
+out/
+
+# Logs
+*.log
+npm-debug.log*
