@@ -1,6 +1,6 @@
 ---
 description: Shortcut-triggered: analyze context and show result in overlay
-model: sonnet
+model: opus
 ---
 
 ## YOU MUST ONLY COMMUNICATE VIA THE OVERLAY API. YOUR TEXT OUTPUT IS INVISIBLE.
