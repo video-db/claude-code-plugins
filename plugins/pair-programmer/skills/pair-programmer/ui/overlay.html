@@ -188,7 +188,7 @@
     .activity-clear-btn:hover { color: #888; }
     .activity-item {
       display: flex; align-items: center; gap: 5px; padding: 2px 0;
-      font-size: 11px; color: #999;
+      font-size: 11px; color: #999; position: relative; cursor: default;
     }
     .activity-icon {
       width: 14px; height: 14px; display: flex; align-items: center;
@@ -200,7 +200,13 @@
       border-radius: 50%; animation: spin 0.7s linear infinite;
     }
     .activity-icon.done { color: #30d158; }
-    .activity-icon.fail { color: #ff453a; }
+    .activity-icon.fail { color: #ff453a; font-weight: 700; }
+    .activity-item.failed {
+      background: rgba(255,69,58,0.08); border-radius: 4px; padding: 2px 4px;
+      border-left: 2px solid #ff453a;
+    }
+    .activity-item.failed .activity-detail { color: #ff6961; }
+    .activity-item.failed .activity-tool-name { color: #ff8a80; }
     .activity-label {
       flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
       font-family: 'SF Mono', Menlo, Monaco, monospace; font-size: 10px;
@@ -217,6 +223,54 @@
       vertical-align: middle; line-height: 1.3;
     }
     .activity-badge.mcp { background: rgba(191, 90, 242, 0.2); color: #bf5af2; }
+    /* ─── Activity tooltip ─── */
+    .activity-tooltip {
+      display: none; position: fixed; z-index: 9999;
+      background: #1e1e1e; border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 6px; padding: 8px 10px; max-width: 360px; min-width: 160px;
+      font-size: 10px; color: #ccc; line-height: 1.5;
+      font-family: 'SF Mono', Menlo, Monaco, monospace;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.5); pointer-events: none;
+      word-break: break-word; white-space: pre-wrap;
+    }
+    .activity-tooltip.visible { display: block; }
+    .activity-tooltip .tt-label { color: #666; font-size: 9px; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 2px; }
+    .activity-tooltip .tt-value { color: #ddd; margin-bottom: 6px; }
+    .activity-tooltip .tt-value:last-child { margin-bottom: 0; }
+    .activity-tooltip .tt-error { color: #ff453a; }
+    .activity-tooltip .tt-status { font-weight: 600; margin-bottom: 6px; }
+    .activity-tooltip .tt-status.running { color: #0a84ff; }
+    .activity-tooltip .tt-status.done { color: #30d158; }
+    .activity-tooltip .tt-status.fail { color: #ff453a; }
+    /* ─── Running agents strip ─── */
+    .running-agents {
+      display: none; flex-shrink: 0; gap: 4px; flex-wrap: wrap;
+      padding: 4px 0 6px; border-bottom: 1px solid rgba(255,255,255,0.04);
+      margin-bottom: 4px;
+    }
+    .running-agents.visible { display: flex; }
+    .agent-chip {
+      display: flex; align-items: center; gap: 4px;
+      padding: 3px 8px; border-radius: 10px; font-size: 9px; font-weight: 600;
+      animation: chip-in 0.2s ease-out;
+    }
+    .agent-chip .chip-spin {
+      width: 8px; height: 8px; border: 1.5px solid rgba(255,255,255,0.15);
+      border-radius: 50%; animation: spin 0.7s linear infinite;
+    }
+    .agent-chip .chip-dur { font-weight: 400; color: rgba(255,255,255,0.4); font-variant-numeric: tabular-nums; margin-left: 2px; }
+    .agent-chip.done { opacity: 0.5; }
+    .agent-chip.done .chip-spin { animation: none; border-color: transparent; }
+    .agent-chip.agent-code-eye { background: rgba(94,92,230,0.15); color: #8b89f5; }
+    .agent-chip.agent-code-eye .chip-spin { border-top-color: #5e5ce6; }
+    .agent-chip.agent-voice { background: rgba(48,209,88,0.15); color: #5ee679; }
+    .agent-chip.agent-voice .chip-spin { border-top-color: #30d158; }
+    .agent-chip.agent-hearing { background: rgba(255,214,10,0.15); color: #ffe151; }
+    .agent-chip.agent-hearing .chip-spin { border-top-color: #ffd60a; }
+    .agent-chip.agent-narrator { background: rgba(10,132,255,0.15); color: #4da6ff; }
+    .agent-chip.agent-narrator .chip-spin { border-top-color: #0a84ff; }
+    @keyframes chip-in { from { opacity: 0; transform: scale(0.8); } to { opacity: 1; transform: scale(1); } }
+
     .activity-item.subagent { border-left: 2px solid #0a84ff; padding-left: 5px; margin-left: 1px; }
     .activity-item.subagent .activity-tool-name { color: #0a84ff; }
     .activity-item.subagent.agent-code-eye { border-left-color: #5e5ce6; }
@@ -398,6 +452,7 @@
         <div class="activity-top-row">
           <button class="activity-clear-btn" onclick="clearActivityFeed()">clear</button>
         </div>
+        <div class="running-agents" id="runningAgents"></div>
         <div class="panel-scroll" id="activityScroll">
           <div id="activityList">
             <div class="panel-empty" id="activityEmpty">Waiting for activity...</div>
@@ -405,6 +460,8 @@
         </div>
       </div>
     </div>
+
+    <div class="activity-tooltip" id="activityTooltip"></div>
 
     <div class="permission-prompt" id="permissionPrompt">
       <div class="permission-title">🔐 Permission Request</div>
@@ -772,16 +829,18 @@
         var tn = data.tool_name||'unknown', detail = summarizeInput(tn, data.tool_input);
         if (!pendingTools[tn]) pendingTools[tn] = [];
         pendingTools[tn].push(seq);
-        activityItems[seq] = { toolName: tn, start: Date.now() };
+        activityItems[seq] = { toolName: tn, start: Date.now(), status: 'running', input: data.tool_input || '' };
         var el = document.createElement('div');
         var cls = 'activity-item';
         if (tn === 'Search') cls += ' search-tool';
         else if (isMcpTool(tn)) cls += ' mcp-tool';
-        el.className = cls; el.id = 'activity-'+seq;
+        el.className = cls; el.id = 'activity-'+seq; el.dataset.seq = seq;
         el.innerHTML = '<div class="activity-icon"><div class="mini-spin"></div></div>' +
           '<div class="activity-label"><span class="activity-tool-name">'+prettifyToolName(tn)+'</span>' +
           '<span class="activity-detail">'+escapeHtml(detail)+'</span></div>' +
           '<span class="activity-duration" id="activity-dur-'+seq+'"></span>';
+        el.addEventListener('mouseenter', showActivityTooltip);
+        el.addEventListener('mouseleave', hideActivityTooltip);
         list.appendChild(el); scrollEl.scrollTop = scrollEl.scrollHeight;
         activityItems[seq].timer = setInterval(function() {
           var d = document.getElementById('activity-dur-'+seq);
@@ -794,11 +853,26 @@
         if (seq && activityItems[seq]) {
           var it = activityItems[seq]; if (it.timer) clearInterval(it.timer);
           var elapsed = ((Date.now()-it.start)/1000).toFixed(1);
+          it.elapsed = elapsed;
+          it.output = data.tool_output || '';
+          if (data.event==='PostToolUse') { it.status = 'done'; }
+          else { it.status = 'fail'; }
           var el = document.getElementById('activity-'+seq);
           if (el) {
             var ic = el.querySelector('.activity-icon');
-            if (data.event==='PostToolUse') { ic.innerHTML='✓'; ic.className='activity-icon done'; }
-            else { ic.innerHTML='✗'; ic.className='activity-icon fail'; }
+            if (it.status==='done') { ic.innerHTML='✓'; ic.className='activity-icon done'; }
+            else {
+              ic.innerHTML='✗'; ic.className='activity-icon fail';
+              el.classList.add('failed');
+              var dt = el.querySelector('.activity-detail');
+              if (dt && it.output) {
+                var errMsg = it.output;
+                try { errMsg = JSON.parse(errMsg); } catch(_) {}
+                errMsg = String(errMsg).substring(0, 80);
+                if (errMsg.length >= 80) errMsg += '…';
+                dt.textContent = errMsg;
+              }
+            }
             var d = document.getElementById('activity-dur-'+seq); if (d) d.textContent = elapsed+'s';
           }
           if (q && !q.length) delete pendingTools[tn];
@@ -815,35 +889,56 @@
         }); pendingTools = {};
       }
       if (data.event === 'SubagentStart') {
-        activitySeq++; var seq = activitySeq;
         var at = data.agent_type||'unknown';
-        var lbl = {'code-eye':'code-eye','voice':'voice','hearing':'hearing'}[at]||at;
-        var ico = {'code-eye':'👁','voice':'🎤','hearing':'🔊'}[at]||'⚡';
+        var ico = {'code-eye':'👁','voice':'🎤','hearing':'🔊','narrator':'📝'}[at]||'⚡';
+        var strip = document.getElementById('runningAgents');
+        var existing = document.getElementById('chip-'+at);
+        if (existing) existing.remove();
+        var chip = document.createElement('div');
+        chip.className = 'agent-chip agent-'+at; chip.id = 'chip-'+at;
+        chip.innerHTML = ico+' '+escapeHtml(at)+' <div class="chip-spin"></div><span class="chip-dur"></span>';
+        strip.appendChild(chip);
+        strip.classList.add('visible');
+        var startT = Date.now();
+        chip._timer = setInterval(function() {
+          var d = chip.querySelector('.chip-dur');
+          if (d) d.textContent = ((Date.now()-startT)/1000|0)+'s';
+        }, 500);
+        // Also add a subtle activity-list entry
+        activitySeq++; var seq = activitySeq;
         var ak = '_agent_'+at;
         if (!pendingTools[ak]) pendingTools[ak] = [];
         pendingTools[ak].push(seq);
-        activityItems[seq] = { toolName: at, start: Date.now() };
+        activityItems[seq] = { toolName: at, start: startT };
         var el = document.createElement('div');
         el.className = 'activity-item subagent agent-'+at; el.id = 'activity-'+seq;
         el.innerHTML = '<div class="activity-icon">'+ico+'</div>' +
-          '<div class="activity-label"><span class="activity-tool-name">'+escapeHtml(lbl)+'</span>' +
-          '<span class="activity-detail">analyzing...</span></div>' +
+          '<div class="activity-label"><span class="activity-tool-name">'+escapeHtml(at)+'</span>' +
+          '<span class="activity-detail">started</span></div>' +
           '<span class="activity-duration" id="activity-dur-'+seq+'"></span>';
         list.appendChild(el); scrollEl.scrollTop = scrollEl.scrollHeight;
-        activityItems[seq].timer = setInterval(function() {
-          var d = document.getElementById('activity-dur-'+seq);
-          if (d) d.textContent = ((Date.now()-activityItems[seq].start)/1000).toFixed(1)+'s';
-        }, 200);
       }
       if (data.event === 'SubagentStop') {
-        var at = data.agent_type||'unknown', ak = '_agent_'+at;
+        var at = data.agent_type||'unknown';
+        var chip = document.getElementById('chip-'+at);
+        if (chip) {
+          clearInterval(chip._timer);
+          chip.classList.add('done');
+          var spin = chip.querySelector('.chip-spin'); if (spin) spin.remove();
+          setTimeout(function() {
+            chip.remove();
+            var strip = document.getElementById('runningAgents');
+            if (!strip.children.length) strip.classList.remove('visible');
+          }, 2000);
+        }
+        var ak = '_agent_'+at;
         var q = pendingTools[ak], seq = q && q.length > 0 ? q.shift() : null;
         if (seq && activityItems[seq]) {
-          var it = activityItems[seq]; if (it.timer) clearInterval(it.timer);
+          var it = activityItems[seq];
           var elapsed = ((Date.now()-it.start)/1000).toFixed(1);
           var el = document.getElementById('activity-'+seq);
           if (el) {
-            var dt = el.querySelector('.activity-detail'); if (dt) dt.textContent = 'done';
+            var dt = el.querySelector('.activity-detail'); if (dt) dt.textContent = elapsed+'s';
             var ic = el.querySelector('.activity-icon'); if (ic) ic.className = 'activity-icon done';
             var d = document.getElementById('activity-dur-'+seq); if (d) d.textContent = elapsed+'s';
           }
@@ -863,6 +958,9 @@
       Object.keys(activityItems).forEach(function(k) { if (activityItems[k].timer) clearInterval(activityItems[k].timer); });
       activityItems = {}; pendingTools = {}; activitySeq = 0; hasActivityItems = false;
       document.getElementById('activityList').innerHTML = '<div class="panel-empty" id="activityEmpty">Waiting for activity...</div>';
+      var strip = document.getElementById('runningAgents');
+      Array.from(strip.children).forEach(function(c) { if (c._timer) clearInterval(c._timer); });
+      strip.innerHTML = ''; strip.classList.remove('visible');
     }
 
     /* ═══════════════════════════════════════════
@@ -902,6 +1000,58 @@
         var k = Object.keys(i);
         if (k.length) { var v=String(i[k[0]]); return v.length>50?v.substring(0,47)+'...':v; }
       } catch(e) {} return '';
+    }
+    function formatTooltipInput(tn, raw) {
+      try {
+        var i = typeof raw === 'string' ? JSON.parse(raw) : raw;
+        if (!i || typeof i !== 'object') return raw || '';
+        var lines = [];
+        Object.keys(i).forEach(function(k) {
+          var v = i[k], s = typeof v === 'string' ? v : JSON.stringify(v);
+          if (s && s.length > 200) s = s.substring(0, 197) + '…';
+          lines.push(k + ': ' + s);
+        });
+        return lines.join('\n');
+      } catch(e) { return String(raw || '').substring(0, 300); }
+    }
+    function showActivityTooltip(e) {
+      var el = e.currentTarget, seq = el.dataset.seq;
+      var it = activityItems[seq]; if (!it) return;
+      var tt = document.getElementById('activityTooltip');
+      var html = '';
+      // Status
+      var statusLabel = it.status === 'running' ? '● Running' : it.status === 'done' ? '✓ Completed' : '✗ Failed';
+      html += '<div class="tt-status ' + it.status + '">' + statusLabel;
+      if (it.elapsed) html += ' (' + it.elapsed + 's)';
+      html += '</div>';
+      // Tool name
+      html += '<div class="tt-label">Tool</div><div class="tt-value">' + escapeHtml(it.toolName) + '</div>';
+      // Input
+      var inp = formatTooltipInput(it.toolName, it.input);
+      if (inp) html += '<div class="tt-label">Input</div><div class="tt-value">' + escapeHtml(inp) + '</div>';
+      // Output / error (only for finished)
+      if (it.output && it.status !== 'running') {
+        var out = it.output;
+        try { out = JSON.parse(out); } catch(_) {}
+        if (typeof out === 'object') out = JSON.stringify(out, null, 2);
+        out = String(out);
+        if (out.length > 400) out = out.substring(0, 397) + '…';
+        var lbl = it.status === 'fail' ? 'Error' : 'Output';
+        var cls = it.status === 'fail' ? ' tt-error' : '';
+        html += '<div class="tt-label">' + lbl + '</div><div class="tt-value' + cls + '">' + escapeHtml(out) + '</div>';
+      }
+      tt.innerHTML = html;
+      // Position: above the item, aligned left
+      var rect = el.getBoundingClientRect();
+      var ttW = 360, ttH = tt.offsetHeight || 100;
+      tt.classList.add('visible');
+      var left = Math.max(4, Math.min(rect.left, window.innerWidth - ttW - 8));
+      var top = rect.top - tt.offsetHeight - 6;
+      if (top < 4) top = rect.bottom + 6;
+      tt.style.left = left + 'px'; tt.style.top = top + 'px';
+    }
+    function hideActivityTooltip() {
+      document.getElementById('activityTooltip').classList.remove('visible');
     }
 
     /* ─── Permission ─── */

@@ -642,8 +642,59 @@ function startAPIServer() {
 // Unix Socket Server (fast IPC for hooks)
 // =============================================================================
 
+const HOOK_LOG_PATH = "/tmp/videodb-hook.log";
+function hookLog(msg) {
+  try { fs.appendFileSync(HOOK_LOG_PATH, `[${new Date().toISOString()}] ${msg}\n`); } catch (_) {}
+}
+function toolDetail(name, input) {
+  try {
+    const i = typeof input === "string" ? JSON.parse(input) : input;
+    if (!i) return "";
+    if (name === "Task") {
+      const agent = (i.subagent_type || i.agent_type || "").split(":").pop();
+      const desc = i.description || "";
+      return agent ? ` → ${agent}${desc ? " (" + desc.substring(0, 40) + ")" : ""}` : "";
+    }
+    if (name === "Bash") {
+      const cmd = (i.command || "").substring(0, 60).replace(/\n/g, " ");
+      return cmd ? ` → ${cmd}` : "";
+    }
+    if (name === "Read" || name === "Write" || name === "Edit") return i.file_path ? ` → ${i.file_path}` : "";
+    if (name === "Grep") return i.pattern ? ` → ${i.pattern}` : "";
+    if (name === "Search") return i.query ? ` → "${i.query.substring(0, 40)}"` : "";
+    if (name.startsWith("mcp__")) {
+      const short = name.split("__").pop();
+      if (short === "show_overlay") return i.loading ? " → loading" : ` → ${(i.text || "").substring(0, 40)}`;
+      if (short === "get_status") return "";
+      if (short === "search_rtstream") return i.query ? ` → "${i.query.substring(0, 40)}"` : "";
+    }
+  } catch (_) {}
+  return "";
+}
+const KNOWN_AGENTS = new Set(["code-eye", "voice", "hearing", "narrator"]);
+function extractAgentType(input) {
+  try {
+    const i = typeof input === "string" ? JSON.parse(input) : input;
+    if (!i) return null;
+    // Check explicit fields first
+    for (const key of ["subagent_type", "agent_type"]) {
+      if (i[key]) {
+        const name = i[key].split(":").pop();
+        if (KNOWN_AGENTS.has(name)) return name;
+      }
+    }
+    // Scan description / prompt for known agent names
+    const text = ((i.description || "") + " " + (i.prompt || "")).toLowerCase();
+    for (const agent of KNOWN_AGENTS) {
+      if (text.includes(agent)) return agent;
+    }
+    return null;
+  } catch (_) { return null; }
+}
+
 function startHookSocket() {
   try { fs.unlinkSync(HOOK_SOCKET_PATH); } catch (_) {}
+  try { fs.writeFileSync(HOOK_LOG_PATH, ""); } catch (_) {} // reset log on start
 
   const server = net.createServer((conn) => {
     let buf = "";
@@ -658,18 +709,37 @@ function startHookSocket() {
         // Only show events from our cortex session
         const evtSession = data.session_id || data.sessionId;
         if (evtSession) {
-          if (!claudeSessionId || evtSession !== claudeSessionId) return;
+          if (!claudeSessionId || evtSession !== claudeSessionId) {
+            hookLog(`DROP ${event} session=${(evtSession || "").substring(0, 8)}…`);
+            return;
+          }
+        } else if (claudeSessionId) {
+          // No session_id on event but we have an active session — drop it
+          hookLog(`DROP ${event} (no session_id, ignoring)`);
+          return;
         }
 
         // Build the overlay payload from raw hook data
+        const rawInput = data.tool_input || {};
         let payload;
         switch (event) {
           case "PreToolUse":
           case "PostToolUse":
           case "PostToolUseFailure": {
             let toolName = data.tool_name || "unknown";
-            let toolInput = data.tool_input || {};
-            const toolOutput = JSON.stringify(data.tool_output || "").substring(0, 300);
+            let toolInput = rawInput;
+            const toolOutput = JSON.stringify(data.tool_output || "").substring(0, 500);
+
+            // Detect sub-agent Task calls → emit SubagentStart/SubagentStop
+            if (toolName === "Task") {
+              const agentType = extractAgentType(rawInput);
+              if (agentType) {
+                const subEvent = event === "PreToolUse" ? "SubagentStart" : "SubagentStop";
+                overlayManager.pushHookEvent({ event: subEvent, agent_type: agentType });
+                hookLog(`${subEvent} ${agentType}`);
+                break;
+              }
+            }
 
             // Detect search curl commands and rewrite as a clean search event
             if (toolName === "Bash" && typeof toolInput.command === "string" && toolInput.command.includes("rtstream/search")) {
@@ -679,17 +749,22 @@ function startHookSocket() {
             }
 
             payload = { event, tool_name: toolName, tool_input: JSON.stringify(toolInput).substring(0, 300), tool_output: toolOutput };
+            hookLog(`${event} ${toolName}${toolDetail(toolName, rawInput)}`);
             break;
           }
           case "Stop":
             payload = { event, stop_reason: data.stop_reason || "end_turn" };
+            hookLog(`Stop (${payload.stop_reason})`);
             break;
           default:
             payload = { event };
+            hookLog(event);
         }
 
-        overlayManager.pushHookEvent(payload);
-      } catch (_) {}
+        if (payload) overlayManager.pushHookEvent(payload);
+      } catch (e) {
+        hookLog(`ERROR ${e.message}`);
+      }
     });
     conn.on("error", () => {});
   });
@@ -958,7 +1033,13 @@ app.whenReady().then(async () => {
       apiPort: API_PORT,
     });
 
-    // Initialize VideoDB connection
+    // ── Phase 1: Local infrastructure (no external deps, fast) ──
+    startAPIServer();
+    startHookSocket();
+
+    // ── Phase 2: Parallel — VideoDB connection + Claude session ──
+    // Both are independent; Claude session runs during the slow tunnel wait
+    initClaudeSession();
     const connected = await initializeVideoDB();
     if (!connected) {
       new Notification({
@@ -967,11 +1048,7 @@ app.whenReady().then(async () => {
       }).show();
     }
 
-    // Start HTTP API server (needed before tunnel so port is listening)
-    startAPIServer();
-    startHookSocket();
-
-    // Setup webhook URL (from config or cloudflare tunnel) — must happen before createSession
+    // ── Phase 3: Webhook / tunnel (needs API server running) ──
     if (CONFIGURED_WEBHOOK_URL) {
       const baseUrl = CONFIGURED_WEBHOOK_URL.replace(/\/+$/, "");
       webhookUrl = `${baseUrl}/webhook`;
@@ -988,10 +1065,9 @@ app.whenReady().then(async () => {
       }
     }
 
-    // Wait for tunnel/webhook to stabilize before verifying
     if (webhookUrl) {
-      console.log("Waiting 10s for webhook URL to stabilize...");
-      await new Promise((r) => setTimeout(r, 10000));
+      console.log("Waiting 5s for webhook URL to stabilize...");
+      await new Promise((r) => setTimeout(r, 5000));
 
       const baseUrl = webhookUrl.replace(/\/webhook$/, "");
       try {
@@ -1003,6 +1079,7 @@ app.whenReady().then(async () => {
       }
     }
 
+    // ── Phase 4: Capture session (needs VideoDB + webhook URL) ──
     if (connected) {
       try {
         await createSession();
@@ -1012,16 +1089,11 @@ app.whenReady().then(async () => {
       }
     }
 
-    // Request permissions via captureClient (recorder binary) + check status
+    // ── Phase 5: Permissions (needs captureClient from createSession) ──
     await checkAndRequestPermissions();
 
     trayManager.markStartupComplete();
-
-    // Register global shortcut for assistant
     registerAssistantShortcut();
-
-    // Pre-create a Claude session so shortcut can resume it
-    initClaudeSession();
 
     overlayManager.showReady();
 

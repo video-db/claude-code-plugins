@@ -8,18 +8,27 @@ set -euo pipefail
 INPUT=$(cat)
 LOG="/tmp/videodb-hooks.log"
 SOCK="/tmp/videodb-hook.sock"
-TRANSCRIPT_PATH=$(echo "$INPUT" | jq -r '.transcript_path // ""')
+CONFIG_FILE="${HOME}/.config/videodb/config.json"
+PORT=$(jq -r '.recorder_port // 8899' "$CONFIG_FILE" 2>/dev/null)
 
 # Only guard if recorder is running (socket exists)
 [ -S "$SOCK" ] || exit 0
 
-echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) [StopGuard] Checking transcript for final overlay call" >> "$LOG"
+# Get session IDs — hook input has this session's ID, API has the cortex session ID
+HOOK_SESSION=$(echo "$INPUT" | jq -r '.session_id // ""')
+CORTEX_SESSION=$(curl -s "http://127.0.0.1:${PORT}/api/claude-session" 2>/dev/null | jq -r '.claudeSessionId // ""')
 
-# Check if transcript exists
-if [ -z "$TRANSCRIPT_PATH" ] || [ ! -f "$TRANSCRIPT_PATH" ]; then
-  echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) [StopGuard] No transcript, allowing stop" >> "$LOG"
+# Only guard the cortex session — skip all other sessions
+if [ -z "$CORTEX_SESSION" ] || [ "$HOOK_SESSION" != "$CORTEX_SESSION" ]; then
   exit 0
 fi
+
+TRANSCRIPT_PATH=$(echo "$INPUT" | jq -r '.transcript_path // ""')
+if [ -z "$TRANSCRIPT_PATH" ] || [ ! -f "$TRANSCRIPT_PATH" ]; then
+  exit 0
+fi
+
+echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) [StopGuard] Cortex session $HOOK_SESSION, checking for final overlay call" >> "$LOG"
 
 # Count show_overlay calls (MCP tool calls in transcript)
 OVERLAY_CALLS=$(grep -c 'show_overlay' "$TRANSCRIPT_PATH" 2>/dev/null) || OVERLAY_CALLS=0
