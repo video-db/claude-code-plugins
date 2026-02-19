@@ -2,7 +2,7 @@
 
 Talk to your videos using natural language. Upload, search, edit, generate subtitles, create clips, and more.
 
-> Built on the [VideoDB Python SDK](https://github.com/video-db/videodb-python) | Works with **Claude Code**, **Claude Web**, and the **Claude API**
+> Built on the [VideoDB Python SDK](https://github.com/video-db/videodb-python) and [VideoDB Capture SDK](https://github.com/video-db/videodb-capture-quickstart) | Works with **Claude Code**, **Claude Web**, and the **Claude API**
 
 ---
 
@@ -217,6 +217,29 @@ plugins/videodb/
 | [RTSTREAM.md](skills/videodb/RTSTREAM.md) | Real-time HLS streaming |
 | [CAPTURE.md](skills/videodb/CAPTURE.md) | Real-time capture architecture and AI pipelines |
 | [USE_CASES.md](skills/videodb/USE_CASES.md) | End-to-end workflow examples |
+
+---
+
+## Real-Time Capture
+
+The plugin includes a ready-to-run capture setup powered by the [VideoDB Capture SDK](https://github.com/video-db/videodb-capture-quickstart). It uses a two-process model:
+
+- **`scripts/backend.py`** -- Flask server with a Cloudflare tunnel that creates capture sessions, handles webhook events, and starts AI pipelines (transcription, audio indexing, visual indexing)
+- **`scripts/client.py`** -- Captures screen, mic, and system audio using `CaptureClient` and streams to VideoDB for real-time processing
+
+### Quick start
+
+```bash
+# Terminal 1: start the backend
+.venv/bin/python scripts/backend.py
+
+# Terminal 2: start the client
+.venv/bin/python scripts/client.py
+```
+
+The backend automatically creates a Cloudflare tunnel for the webhook URL. The client requests device permissions, discovers channels, and begins streaming. Press Enter in the client terminal to stop recording.
+
+See [CAPTURE.md](skills/videodb/CAPTURE.md) for the full architecture guide, AI pipeline setup, and webhook event handling.
 
 ---
 
