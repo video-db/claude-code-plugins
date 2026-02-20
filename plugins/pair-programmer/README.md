@@ -6,6 +6,12 @@
 
 ---
 
+## Demo
+
+https://github.com/user-attachments/assets/24f25eff-2af1-4048-9bbb-8d1d09559ebb
+
+---
+
 ## 🔌 Installation
 
 ```bash
@@ -49,16 +55,15 @@ A perception layer for Claude Code that streams your screen, microphone, and sys
 ## How It Works
 
 1. **Start recording** via `/pair-programmer:record` — continuously captures screen, mic, and system audio in the background
-2. The recorder runs as an Electron app exposing an HTTP API on `localhost:8899`
-3. **Context buffers** fill up automatically as you work (last 50 items by default)
-4. **Trigger AI analysis** anytime via keyboard shortcut (`Cmd+Shift+A` by default) or `/pair-programmer:cortex`
-5. **Multi-agent system** analyzes buffered context:
+2. **Context buffers** fill up automatically as you work (last 50 items by default)
+3. **Trigger AI analysis** anytime via keyboard shortcut (`Cmd+Shift+A` by default) or `/pair-programmer:cortex`
+4. **Multi-agent system** analyzes buffered context:
    - **cortex** — Orchestrator that correlates reports and synthesizes answers
    - **code-eye** — Reads visual screen context (files, errors, activities)
    - **voice** — Classifies speech intent and extracts keywords
    - **hearing** — Classifies system audio source
    - **narrator** — Shows status and responses in overlay
-6. **Answer appears** in always-on-top overlay window with analysis and suggestions
+5. **Answer appears** in always-on-top overlay window with analysis and suggestions
 
 No copy-pasting. No context switching. Just keep working and ask when you need help.
 
@@ -98,7 +103,6 @@ No copy-pasting. No context switching. Just keep working and ask when you need h
 | `/pair-programmer:refresh-context` | Fetch current screen/mic/system_audio context |
 | `/pair-programmer:what-happened` | Summarize recent activity with timeline |
 | `/pair-programmer:cortex` | Trigger AI analysis of buffered context |
-| `/pair-programmer:update` | Update npm dependencies (videodb SDK, electron) |
 
 ---
 
@@ -124,8 +128,6 @@ Access via `/pair-programmer:record-config`. Key settings:
 | `visual_index.enabled` | `true` | Enable screen indexing |
 | `mic_index.enabled` | `true` | Enable microphone transcription |
 | `system_audio_index.enabled` | `true` | Enable system audio indexing |
-
-**Note**: After configuring or updating settings, restart Claude Code for changes to take effect.
 
 ---
 
